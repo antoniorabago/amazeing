@@ -48,9 +48,9 @@ class Config(BaseModel):
         entry_x, entry_y = self.entry
         exit_x, exit_y = self.exit
 
-        if not ((0 <= entry_x < self.width) or (0 <= entry_y < self.height)):
+        if not ((0 <= entry_x < self.width) and (0 <= entry_y < self.height)):
             raise ValueError("Entry is outside the maze")
-        if not ((0 <= exit_x < self.width) or (0 <= exit_y < self.height)):
+        if not ((0 <= exit_x < self.width) and (0 <= exit_y < self.height)):
             raise ValueError("Exit is outside the maze")
 
         return self
