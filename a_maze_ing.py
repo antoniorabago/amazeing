@@ -19,7 +19,7 @@ def main() -> None:
         solution_path = maze.solve()
         print(solution_path)
         renderer = Renderer(maze, solution_path)
-        renderer.draw()
+        renderer.render()
         maze.write_output()
 
     except ValidationError as e:

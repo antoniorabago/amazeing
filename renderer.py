@@ -5,7 +5,6 @@ from enum import Enum
 class Ansi(str, Enum):
     ESC = '\033'
     CLEAR = ESC + '[2J'
-    HOME = ESC + '[H'
     RED = ESC + '[31m'
     YELLOW = ESC + '[33m'
     GREEN = ESC + '[32m'
@@ -32,6 +31,8 @@ class Unicode(str, Enum):
     BOTTOM_LEFT = "└"
     BOTTOM = "┴"
     BOTTOM_RIGHT = "┘"
+    RABBIT = "\U0001F430"
+    CARROT = "\U0001F955"
 
 
 class Walls(int, Enum):
@@ -49,6 +50,9 @@ class NeighborPos(str, Enum):
 
 
 class Renderer:
+    CELL_WIDTH = 4
+    CELL_HEIGHT = 2
+
     def __init__(self,
                  maze: MazeGenerator,
                  path: list[tuple[int, int]]) -> None:
@@ -57,20 +61,65 @@ class Renderer:
         self.grid_height = maze.height
         self.entry = maze.entry
         self.exit = maze.exit
+        self.blocked = maze.blocked
         self.path = path
 
-    def _create_drawing(self) -> list[list[str]]:
+    # Función que crea la cuadrícula del laberinto
+    def _create_canvas(self) -> list[list[str]]:
         drawing: list[list[str]] = []
-        for _ in range(self.grid_height * 2 + 1):
+        for _ in range(self.grid_height * self.CELL_HEIGHT + 1):
             row = []
-            for _ in range(self.grid_width * 6 + 1):
+            for _ in range(self.grid_width * self.CELL_WIDTH + 1):
                 row.append(" ")
             drawing.append(row)
         return drawing
 
-    def _get_drawing(self,
-                     cell: int
-                     ) -> dict[NeighborPos, bool]:
+    # Función que obtiene el valor de las celdas vecinas
+    def _get_neighbors_cells(
+        self,
+        row_index: int,
+        col_index: int
+    ) -> dict[NeighborPos, int | None]:
+        neighbors: dict[NeighborPos, int | None] = {}
+        # NORTH
+        if row_index == 0:
+            neighbors[NeighborPos.NORTH] = None
+        else:
+            neighbor_row = row_index - 1
+            neighbor_col = col_index
+            neighbors[NeighborPos.NORTH] = (
+                self.grid[neighbor_row][neighbor_col]
+            )
+        # WEST
+        if col_index == 0:
+            neighbors[NeighborPos.WEST] = None
+        else:
+            neighbor_row = row_index
+            neighbor_col = col_index - 1
+            neighbors[NeighborPos.WEST] = self.grid[neighbor_row][neighbor_col]
+        # SOUTH
+        if row_index == self.grid_height - 1:
+            neighbors[NeighborPos.SOUTH] = None
+        else:
+            neighbor_row = row_index + 1
+            neighbor_col = col_index
+            neighbors[NeighborPos.SOUTH] = (
+                self.grid[neighbor_row][neighbor_col]
+            )
+        # EAST
+        if col_index == self.grid_width - 1:
+            neighbors[NeighborPos.EAST] = None
+        else:
+            neighbor_row = row_index
+            neighbor_col = col_index + 1
+            neighbors[NeighborPos.EAST] = self.grid[neighbor_row][neighbor_col]
+
+        return neighbors
+
+    # Función que indica las paredes a dibujar de cada celda
+    def _get_cell_walls(self,
+                        cell: int
+                        ) -> dict[NeighborPos, bool]:
         drawing = {
             NeighborPos.NORTH: bool(cell & Walls.NORTH),
             NeighborPos.EAST: bool(cell & Walls.EAST),
@@ -79,136 +128,119 @@ class Renderer:
         }
         return drawing
 
-    def _render_cell(self,
-                     row_index: int,
-                     col_index: int,
-                     drawing: dict[NeighborPos, bool],
-                     draw_grid: list[list[str]]
-                     ) -> None:
-        top = row_index * 2
-        left = col_index * 6
+    # Función que muestra cada celda
+    def _draw_cell_walls(self,
+                         row_index: int,
+                         col_index: int,
+                         drawing: dict[NeighborPos, bool],
+                         draw_grid: list[list[str]]
+                         ) -> None:
+        top = row_index * self.CELL_HEIGHT
+        left = col_index * self.CELL_WIDTH
         draw_grid[top][left] = "*"
-        draw_grid[top][left + 6] = "*"
-        draw_grid[top + 2][left] = "*"
-        draw_grid[top + 2][left + 6] = "*"
+        draw_grid[top][left + self.CELL_WIDTH] = "*"
+        draw_grid[top + self.CELL_HEIGHT][left] = "*"
+        draw_grid[top + self.CELL_HEIGHT][left + self.CELL_WIDTH] = "*"
 
         if drawing[NeighborPos.NORTH]:
-            for position in range(1, 6):
+            for position in range(1, self.CELL_WIDTH):
                 draw_grid[top][left + position] = Unicode.HORIZONTAL.value
         if drawing[NeighborPos.SOUTH]:
-            for position in range(1, 6):
-                draw_grid[top + 2][left + position] = Unicode.HORIZONTAL.value
+            for position in range(1, self.CELL_WIDTH):
+                draw_grid[top + self.CELL_HEIGHT][left + position] = (
+                    Unicode.HORIZONTAL.value
+                )
         if drawing[NeighborPos.EAST]:
-            draw_grid[top + 1][left + 6] = Unicode.VERTICAL.value
+            draw_grid[top + 1][left + self.CELL_WIDTH] = Unicode.VERTICAL.value
         if drawing[NeighborPos.WEST]:
             draw_grid[top + 1][left] = Unicode.VERTICAL.value
 
-    def _render_solution(
+    # Función que muestra la ruta de la solución
+    def _draw_solution_path(
         self,
-        path: set[tuple[int, int]],
+        path: list[tuple[int, int]],
         draw_grid: list[list[str]],
     ) -> None:
-        for col, row in path:
-            top = row * 2
-            left = col * 6
+        arrows = {
+            "E": "→",
+            "W": "←",
+            "S": "↓",
+            "N": "↑",
+        }
+        for index, (col, row) in enumerate(path):
+            top = row * self.CELL_HEIGHT
+            left = col * self.CELL_WIDTH
+            center = top + 1, left + (self.CELL_WIDTH // 2)
+
             if (col, row) == self.entry:
-                draw_grid[top + 1][left + 3] = "S"
+                draw_grid[center[0]][center[1]] = Unicode.RABBIT
             elif (col, row) == self.exit:
-                draw_grid[top + 1][left + 3] = "F"
+                draw_grid[center[0]][center[1]] = Unicode.CARROT
             else:
-                draw_grid[top + 1][left + 3] = "●"
+                next_col, next_row = path[index + 1]
+                if next_col > col:
+                    direction = "E"
+                elif next_col < col:
+                    direction = "W"
+                elif next_row > row:
+                    direction = "S"
+                else:
+                    direction = "N"
+                char = arrows[direction]
+                draw_grid[center[0]][center[1]] = char
 
-    def _print_grid(self, draw_grid: list[list[str]]) -> None:
+    # Función que cambia de color el patrón 42
+    def _draw_42_pattern(self, draw_grid: list[list[str]]) -> None:
+        for x, y in self.blocked:
+            top = y * self.CELL_HEIGHT
+            left = x * self.CELL_WIDTH
+
+            for position in range(1, self.CELL_WIDTH):
+                draw_grid[top + 1][left + position] = (
+                    Ansi.RED.value + "█" + Ansi.RESET.value
+                )
+
+    # Función que imprime la cuadrícula del laberinto
+    def _print_canvas(self, draw_grid: list[list[str]]) -> None:
         for row in draw_grid:
-            print(Ansi.BLUE_BG.value, end="")
-            print(Ansi.YELLOW.value, end="")
-            print("".join(row), end="")
-            print(Ansi.RESET.value)
-        print()
+            col_index = 0
 
-    def draw(self) -> None:
+            while col_index < len(row):
+                col = row[col_index]
+                color = Ansi.BLUE_BG.value + Ansi.WHITE_FG.value
+
+                print(
+                    f"{color}{col}{Ansi.RESET.value}",
+                    end=""
+                )
+
+                if col in (Unicode.RABBIT, Unicode.CARROT):
+                    col_index += 1
+
+                col_index += 1
+
+            print()
+
+    def render(self) -> None:
         # Borrar pantalla
-        # print(Ansi.CLEAR.value, end="")
+        print(Ansi.CLEAR.value, end="")
 
         # Crear laberinto
-        draw_grid = self._create_drawing()
+        draw_grid = self._create_canvas()
 
-        # Ruta de la solución (sin entrada y salida)
-        self.path_cells = set(self.path)
-        # self.path_cells = self.path_cells - {self.entry, self.exit}
-
+        # Dibujar celdas
         for row_index, row in enumerate(self.grid):
             for col_index, cell in enumerate(row):
-                # neighbors = self._get_neighbors(row_index, col_index)
-                # print(neighbors)
-                drawing = self._get_drawing(cell)
-                self._render_cell(row_index, col_index, drawing, draw_grid)
+                neighbors = self._get_neighbors_cells(row_index, col_index)
+                print(neighbors)
+                drawing = self._get_cell_walls(cell)
+                self._draw_cell_walls(row_index, col_index, drawing, draw_grid)
+
+        # Dibujar Ruta de la solución
+        self._draw_solution_path(self.path, draw_grid)
+
+        # Dibujar el patrón 42
+        self._draw_42_pattern(draw_grid)
 
         # Imprimir laberinto
-        # for row in draw_grid:
-        #     print("".join(row), end="")
-        #     print()
-
-        self._render_solution(self.path_cells, draw_grid)
-        self._print_grid(draw_grid)
-
-        # self._render_solution(self.path_cells, draw_grid)
-        # print(self.path_cells)
-
-    # def draw_solution(self, path, draw_grid):
-        #     self._render_solution(path, self.draw_grid)
-
-        #     for row in self.draw_grid:
-        #         print("".join(row))
-
-    # def _get_neighbors(
-    #     self,
-    #     row_index: int,
-    #     col_index: int
-    # ) -> dict[NeighborPos, int | None]:
-    #     neighbors = {}
-    #     # NORTH
-    #     if row_index == 0:
-    #         neighbors[NeighborPos.NORTH] = None
-    #     else:
-    #         neighbor_row = row_index - 1
-    #         neighbor_col = col_index
-    #         neighbors[NeighborPos.NORTH] = self._get_real_walls(
-    #             self.grid[neighbor_row][neighbor_col],
-    #             neighbor_row,
-    #             neighbor_col
-    #         )
-    #     # WEST
-    #     if col_index == 0:
-    #         neighbors[NeighborPos.WEST] = None
-    #     else:
-    #         neighbor_row = row_index
-    #         neighbor_col = col_index - 1
-    #         neighbors[NeighborPos.WEST] = self._get_real_walls(
-    #             self.grid[neighbor_row][neighbor_col],
-    #             neighbor_row,
-    #             neighbor_col
-    #         )
-    #     # SOUTH
-    #     if row_index == self.grid_height - 1:
-    #         neighbors[NeighborPos.SOUTH] = None
-    #     else:
-    #         neighbor_row = row_index + 1
-    #         neighbor_col = col_index
-    #         neighbors[NeighborPos.SOUTH] = self._get_real_walls(
-    #             self.grid[neighbor_row][neighbor_col],
-    #             neighbor_row,
-    #             neighbor_col
-    #         )
-    #     # EAST
-    #     if col_index == self.grid_width - 1:
-    #         neighbors[NeighborPos.EAST] = None
-    #     else:
-    #         neighbor_row = row_index
-    #         neighbor_col = col_index + 1
-    #         neighbors[NeighborPos.EAST] = self._get_real_walls(
-    #             self.grid[neighbor_row][neighbor_col],
-    #             neighbor_row,
-    #             neighbor_col
-    #         )
-    #     return neighbors
+        self._print_canvas(draw_grid)
