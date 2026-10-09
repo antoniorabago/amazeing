@@ -52,7 +52,8 @@ class Config(BaseModel):
             raise ValueError("Entry is outside the maze")
         if not ((0 <= exit_x < self.width) and (0 <= exit_y < self.height)):
             raise ValueError("Exit is outside the maze")
-
+        if self.entry == self.exit:
+            raise ValueError("Entry and exit cannot be the same")
         return self
 
 
@@ -103,7 +104,7 @@ def config_load() -> Config:
     dict_config: dict[ConfigKey, str] = {}
     for line in content.splitlines():
         line = line.strip()
-        if not line:
+        if not line or line.startswith("#"):
             continue
         if "=" not in line:
             raise ValueError(

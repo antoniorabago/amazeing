@@ -1,6 +1,7 @@
 
 import random
 from config_loader import Config
+# from config_loader import config_load
 
 NORTH = 1
 EAST = 2
@@ -22,6 +23,7 @@ class MazeGenerator:
         self.perfect = config.perfect
         self.random = random.Random(config.seed)
         self.blocked: set[tuple[int, int]] = set()
+        self.output_file = config.output_file
         self.grid = [
             [ALL_WALLS for _ in range(config.width)]
             for _ in range(config.height)
@@ -36,15 +38,17 @@ class MazeGenerator:
         center_y = self.height // 2
 
         pattern = [
-            (-3, -2), (-3, -1), (-3, 0),
-            (-2, 0),
-            (-1, 0), (-1, 1), (-1, 2),
+            (-3, -2),         (-1, -2),
+            (-3, -1),         (-1, -1),
+            (-3, 0), (-2, 0), (-1, 0),
+                              (-1, 1),
+                              (-1, 2),
 
             (1, -2), (2, -2), (3, -2),
-            (3, -1),
-            (1, 0), (2, 0), (3, 0),
+                              (3, -1),
+            (1, 0),  (2, 0),  (3, 0),
             (1, 1),
-            (1, 2), (2, 2), (3, 2),
+            (1, 2),  (2, 2),  (3, 2),
         ]
 
         for dx, dy in pattern:
@@ -53,9 +57,22 @@ class MazeGenerator:
 
             self.blocked.add((x, y))
 
+    def is_inside(self, x: int, y: int) -> bool:
+        return (
+            0 <= x < self.width
+            and 0 <= y < self.height
+        )
+
     def _confirm_entry_exit(self) -> None:
+        if not self.is_inside(*self.entry):
+            raise ValueError(f"The entry {self.entry} is outside the maze")
+
+        if not self.is_inside(*self.exit):
+            raise ValueError(f"The exit {self.exit} is outside the maze")
+
         if self.entry in self.blocked:
             raise ValueError(f"The entry {self.entry} is not valid")
+
         if self.exit in self.blocked:
             raise ValueError(f"The exit {self.exit} is not valid")
 
@@ -78,12 +95,6 @@ class MazeGenerator:
         elif x2 == x1 and y2 == y1 - 1:
             self.grid[y1][x1] &= ~NORTH
             self.grid[y2][x2] &= ~SOUTH
-
-    def is_inside(self, x: int, y: int) -> bool:
-        return (
-            0 <= x < self.width
-            and 0 <= y < self.height
-        )
 
     def get_neighbors(self, x: int, y: int) -> list[tuple[int, int]]:
         neighbors = []
@@ -268,8 +279,40 @@ class MazeGenerator:
         path.reverse()
         return path
 
+    def path_to_directions(self, path: list[tuple[int, int]]) -> str:
+        directions = ""
 
-# maze = MazeGenerator(12,9,(0,0), (8,8), False)
+        for i in range(len(path) - 1):
+            x1, y1 = path[i]
+            x2, y2 = path[i + 1]
+
+            if x2 == x1 + 1:
+                directions += "E"
+            elif x2 == x1 - 1:
+                directions += "W"
+            elif y2 == y1 + 1:
+                directions += "S"
+            elif y2 == y1 - 1:
+                directions += "N"
+
+        return directions
+
+    def write_output(self) -> None:
+        path = self.solve()
+        directions = self.path_to_directions(path)
+
+        with open(self.output_file, "w") as file:
+            for row in self.grid:
+                file.write("".join(f"{cell:X}" for cell in row) + "\n")
+
+            file.write("\n")
+            file.write(f"{self.entry[0]},{self.entry[1]}\n")
+            file.write(f"{self.exit[0]},{self.exit[1]}\n")
+            file.write(directions + "\n")
+
+
+# config = config_load()
+# maze = MazeGenerator(config)
 
 
 # print("ANTES:")
@@ -279,7 +322,19 @@ class MazeGenerator:
 #     print()
 
 # maze.generate()
-# path = maze.solve()
+
+# print("Entrada:", maze.entry)
+# print("Salida:", maze.exit)
+# print("Bloqueadas:", maze.blocked)
+
+# print("Despues:")
+# for row in maze.grid:
+#     for cell in row:
+#         print(f"{cell:X}", end="")
+#     print()
+
+# maze.write_output()
+# path = maze.solve
 
 # print("\nDESPUÉS:")
 # for row in maze.grid:

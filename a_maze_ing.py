@@ -16,11 +16,11 @@ def main() -> None:
                 print(format(cell, "X"), end="")
             print()
 
-        solved = maze.solve()
-        print(solved)
-
-        renderer = Renderer(maze, solved)
+        solution_path = maze.solve()
+        print(solution_path)
+        renderer = Renderer(maze, solution_path)
         renderer.draw()
+        maze.write_output()
 
     except ValidationError as e:
         for error in e.errors():
@@ -36,6 +36,8 @@ def main() -> None:
     except ValueError as e:
         print(e)
         return
+    except BaseException as e:
+        print(e.__class__.__name__)
 
 
 if __name__ == "__main__":
